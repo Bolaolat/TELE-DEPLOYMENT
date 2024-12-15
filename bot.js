@@ -2,116 +2,107 @@ const { Telegraf } = require('telegraf');
 const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { TELEGRAM_API_TOKEN } = require('./config'); // Import the token
 
-// Replace with your bot token
-const bot = new Telegraf('7849087949:AAHEuYKeENyVhDMGRoh2bbkp_zJOdqnJ2zA');
+// Initialize the bot
+const bot = new Telegraf(TELEGRAM_API_TOKEN);
 
-// Store the code temporarily
-let codeBuffer = '';
+// Store user states
+const userStates = {};
 
-// Start command
+// Welcome message
 bot.start((ctx) => {
-    ctx.reply('Welcome! This bot can execute shell commands, save code to files, and run saved files. Use responsibly.');
+    const userId = ctx.message.from.id;
+    const userDir = path.join(__dirname, 'users', String(userId)); // Directory path for the user
+
+    // Ensure the user's directory exists
+    if (!fs.existsSync(userDir)) {
+        fs.mkdirSync(userDir, { recursive: true });
+    }
+
+    userStates[userId] = { step: 'ask_repo' }; // Set the user state
+    ctx.reply('Welcome! Please send me the repository URL you want to clone.');
 });
 
-// Capture code sent by the user
+// Handle text messages
 bot.on('text', (ctx) => {
-    const message = ctx.message.text;
+    const userId = ctx.message.from.id;
+    const userDir = path.join(__dirname, 'users', String(userId)); // Directory path for the user
+    const userState = userStates[userId] || { step: 'ask_repo' }; // Default state
 
-    if (message.startsWith('/save ')) {
-        // Save code to a file
-        const filename = message.slice(6).trim();
+    const message = ctx.message.text.trim();
 
-        if (!filename) {
-            return ctx.reply('❌ Please provide a valid filename after "/save". Example: /save index.js');
-        }
+    if (userState.step === 'ask_repo') {
+        // Step 1: Clone the repository
+        const repoUrl = message;
+        ctx.reply(`Cloning the repository from: ${repoUrl}...`);
 
-        const filePath = path.join(__dirname, filename);
-        fs.writeFile(filePath, codeBuffer, (err) => {
-            if (err) {
-                return ctx.reply(`❌ Error saving file: ${err.message}`);
-            }
-            ctx.reply(`✅ Code saved to ${filename}`);
-            codeBuffer = ''; // Clear buffer after saving
-        });
-    } else if (message.startsWith('/run ')) {
-        // Run a saved file
-        const filename = message.slice(5).trim();
-
-        if (!filename) {
-            return ctx.reply('❌ Please provide a valid filename after "/run". Example: /run index.js');
-        }
-
-        const filePath = path.join(__dirname, filename);
-
-        fs.access(filePath, fs.constants.F_OK, (err) => {
-            if (err) {
-                return ctx.reply(`❌ File ${filename} does not exist.`);
-            }
-
-            exec(`node ${filePath}`, (error, stdout, stderr) => {
-                if (error) {
-                    return ctx.reply(`❌ Error: ${error.message}`);
-                }
-                if (stderr) {
-                    return ctx.reply(`⚠️ Stderr: ${stderr}`);
-                }
-                ctx.reply(`✅ Output:\n${stdout}`);
-            });
-        });
-    } else if (message.startsWith('/exec ')) {
-        // Execute shell command
-        const shellCommand = message.slice(6).trim();
-
-        if (!shellCommand) {
-            return ctx.reply('❌ Please provide a shell command after "/exec". Example: /exec ls -la');
-        }
-
-        exec(shellCommand, (error, stdout, stderr) => {
+        exec(`git clone ${repoUrl} .`, { cwd: userDir }, (error, stdout, stderr) => {
+            console.log(`[USER ${userId}] Cloning repository: ${repoUrl}`);
             if (error) {
-                return ctx.reply(`❌ Error: ${error.message}`);
+                console.error(`[USER ${userId}] Clone Error:\n${stderr}`);
+                return ctx.reply(`❌ Error cloning the repository:\n${stderr}`);
             }
-            if (stderr) {
-                return ctx.reply(`⚠️ Stderr: ${stderr}`);
-            }
-            ctx.reply(`✅ Command Output:\n${stdout}`);
-        });
-    } else if (message.startsWith('/npm-install ')) {
-        // Run npm install in the specified path
-        const installPath = message.slice(13).trim();
+            console.log(`[USER ${userId}] Clone Output:\n${stdout}`);
+            ctx.reply(`✅ Repository cloned successfully:\n${stdout}`);
+            userStates[userId].step = 'install_dependencies';
+            ctx.reply('Installing dependencies using `yarn install`...');
 
-        if (!installPath) {
-            return ctx.reply('❌ Please provide a valid path after "/npm-install". Example: /npm-install ./my-project');
+            // Run `yarn install`
+            exec(`yarn install`, { cwd: userDir }, (installError, installStdout, installStderr) => {
+                console.log(`[USER ${userId}] Running 'yarn install'...`);
+                if (installError) {
+                    console.error(`[USER ${userId}] Yarn Install Error:\n${installStderr}`);
+                    return ctx.reply(`❌ Error installing dependencies:\n${installStderr}`);
+                }
+                console.log(`[USER ${userId}] Yarn Install Output:\n${installStdout}`);
+                ctx.reply(`✅ Dependencies installed successfully:\n${installStdout}`);
+                userStates[userId].step = 'ask_file';
+                ctx.reply('Now, send me the name of the file to run using `node`.');
+            });
+        });
+    } else if (userState.step === 'ask_file') {
+        // Step 2: Run the specified file
+        const filename = message;
+        const filePath = path.join(userDir, filename);
+
+        if (!fs.existsSync(filePath)) {
+            console.error(`[USER ${userId}] File not found: ${filename}`);
+            return ctx.reply('❌ The specified file does not exist. Please try again.');
         }
 
-        const fullPath = path.resolve(__dirname, installPath);
-
-        fs.access(fullPath, fs.constants.F_OK, (err) => {
-            if (err) {
-                return ctx.reply(`❌ Path ${installPath} does not exist.`);
+        ctx.reply(`Running the file: ${filename}...`);
+        console.log(`[USER ${userId}] Running file: ${filename}`);
+        exec(`node ${filename}`, { cwd: userDir }, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`[USER ${userId}] File Execution Error:\n${stderr}`);
+                return ctx.reply(`❌ Error running the file:\n${stderr}`);
             }
-
-            exec(`npm install`, { cwd: fullPath }, (error, stdout, stderr) => {
-                if (error) {
-                    return ctx.reply(`❌ Error during npm install: ${error.message}`);
-                }
-                if (stderr) {
-                    return ctx.reply(`⚠️ Stderr during npm install: ${stderr}`);
-                }
-                ctx.reply(`✅ npm install completed in ${installPath}:\n${stdout}`);
-            });
+            console.log(`[USER ${userId}] File Execution Output:\n${stdout}`);
+            ctx.reply(`✅ File executed successfully:\n${stdout}`);
+            userStates[userId].step = 'done'; // Reset the state
         });
     } else {
-        // Capture code for saving
-        codeBuffer += message + '\n'; // Append new code to the buffer
-        ctx.reply('✅ Code captured. Send /save <filename> to save it, /run <filename> to execute it, /exec <command> to run shell commands, or /npm-install <path> to install packages.');
+        ctx.reply('I did not understand that. Please send a valid input.');
     }
+});
+
+// Help command
+bot.command('help', (ctx) => {
+    ctx.reply(`Commands available:\n\n` +
+        `- **/start**: Start the bot.\n` +
+        `- **/help**: Show this help message.\n\n` +
+        `**Workflow**:\n` +
+        `1. Send the repository URL to clone.\n` +
+        `2. Automatically install dependencies using \`yarn install\`.\n` +
+        `3. Specify the file to run using \`node\`.\n\n` +
+        `**Disclaimer**: Use responsibly. Avoid commands that may damage your system.`);
 });
 
 // Launch the bot
 bot.launch()
     .then(() => {
-        console.log('Terminal bot is running...');
+        console.log('Bot is running...');
     })
     .catch((err) => {
         console.error('Error launching bot:', err);
