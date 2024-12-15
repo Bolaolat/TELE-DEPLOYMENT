@@ -2,45 +2,37 @@ const { Telegraf } = require('telegraf');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { TELEGRAM_API_TOKEN } = require('./config'); // Import the token
+const { TELEGRAM_API_TOKEN } = require('./config');
 
-// Initialize the bot
 const bot = new Telegraf(TELEGRAM_API_TOKEN);
 
-// Store user states
 const userStates = {};
 
-// Welcome message
 bot.start((ctx) => {
     const userId = ctx.message.from.id;
-    const userDir = path.join(__dirname, 'users', String(userId)); // Directory path for the user
-
-    // Ensure the user's directory exists
+    const userDir = path.join(__dirname, 'users', String(userId));
     if (!fs.existsSync(userDir)) {
         fs.mkdirSync(userDir, { recursive: true });
     }
-
-    userStates[userId] = { step: 'ask_repo' }; // Set the user state
-    ctx.reply('Welcome! Please send me the repository URL you want to clone. You can also execute shell commands anytime by prefixing them with `$`.');
+    userStates[userId] = { step: 'ask_repo' };
+    ctx.reply('**Welcome! Please provide the repository URL you wish to clone. You can also execute shell commands by prefixing them with $.**\n```Developed by BLUE DEMON.```');
 });
 
-// Handle text messages
 bot.on('text', (ctx) => {
     const userId = ctx.message.from.id;
-    const userDir = path.join(__dirname, 'users', String(userId)); // Directory path for the user
-    const userState = userStates[userId] || { step: 'ask_repo' }; // Default state
+    const userDir = path.join(__dirname, 'users', String(userId));
+    const userState = userStates[userId] || { step: 'ask_repo' };
 
     const message = ctx.message.text.trim();
 
-    // Check if the user is running shell commands
     if (message.startsWith('$')) {
-        const shellCommand = message.slice(1).trim().split(' '); // Extract and split the shell command
-        ctx.reply(`Executing shell command: \`${shellCommand.join(' ')}\`...`);
+        const shellCommand = message.slice(1).trim().split(' ');
+        ctx.reply(`\`\`\`Executing shell command: \`${shellCommand.join(' ')}\`...\`\`\``);
 
         const shellProcess = spawn(shellCommand[0], shellCommand.slice(1), { cwd: userDir });
 
         shellProcess.stdout.on('data', (data) => {
-            ctx.reply(`✅ Output:\n${data.toString()}`);
+            ctx.reply(`\`\`\`✅ Output:\n${data.toString()}\`\`\``);
         });
 
         shellProcess.stderr.on('data', (data) => {
@@ -54,9 +46,7 @@ bot.on('text', (ctx) => {
         return;
     }
 
-    // Handle repository cloning and file execution steps
     if (userState.step === 'ask_repo') {
-        // Step 1: Clone the repository
         const repoUrl = message;
         ctx.reply(`Cloning the repository from: ${repoUrl}...`);
 
@@ -75,7 +65,6 @@ bot.on('text', (ctx) => {
                 ctx.reply('✅ Repository cloned successfully!');
                 userStates[userId].step = 'install_dependencies';
 
-                // Install dependencies
                 ctx.reply('Installing dependencies using `yarn install`...');
                 const yarnInstall = spawn('yarn', ['install'], { cwd: userDir });
 
@@ -93,14 +82,15 @@ bot.on('text', (ctx) => {
                         userStates[userId].step = 'ask_file';
                     } else {
                         ctx.reply('❌ Error installing dependencies.');
+                        userStates[userId].step = 'ask_repo'; // Reset step on failure
                     }
                 });
             } else {
                 ctx.reply('❌ Error cloning the repository.');
+                userStates[userId].step = 'ask_repo'; // Reset step on failure
             }
         });
     } else if (userState.step === 'ask_file') {
-        // Step 2: Run the specified file
         const filename = message;
         const filePath = path.join(userDir, filename);
 
@@ -121,14 +111,13 @@ bot.on('text', (ctx) => {
 
         nodeProcess.on('close', (code) => {
             ctx.reply(`Node process exited with code ${code}.`);
-            userStates[userId].step = 'done'; // Reset the state
+            userStates[userId].step = 'done';
         });
     } else {
         ctx.reply('I did not understand that. Please send a valid input.');
     }
 });
 
-// Help command
 bot.command('help', (ctx) => {
     ctx.reply(`Commands available:\n\n` +
         `- **/start**: Start the bot.\n` +
@@ -142,7 +131,6 @@ bot.command('help', (ctx) => {
         `**Disclaimer**: Use responsibly. Avoid commands that may damage your system.`);
 });
 
-// Launch the bot
 bot.launch()
     .then(() => {
         console.log('Bot is running...');
@@ -151,6 +139,5 @@ bot.launch()
         console.error('Error launching bot:', err);
     });
 
-// Graceful stop for the bot
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
