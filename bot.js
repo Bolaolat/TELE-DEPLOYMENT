@@ -2,12 +2,27 @@ const { Telegraf } = require('telegraf');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const express = require('express'); // Import express
 const { TELEGRAM_API_TOKEN } = require('./config');
 
+// Initialize the Telegram bot
 const bot = new Telegraf(TELEGRAM_API_TOKEN);
 
+// Create an express app to serve the HTML file
+const app = express();
+
+// Serve index.html on the root URL
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve index.html on the '/index.html' route
+app.get('/index.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Set up the bot's user states
 const userStates = {};
 
+// Start the bot
 bot.start((ctx) => {
     const userId = ctx.message.from.id;
     const userDir = path.join(__dirname, 'users', String(userId));
@@ -20,6 +35,7 @@ bot.start((ctx) => {
         '𝐷𝑒𝑣𝑒𝑙𝑜𝑝𝑒𝑑 𝑏𝑦 𝐵𝐿𝑈𝐸 𝐷𝐸𝑀𝑂𝑁');
 });
 
+// Handle text messages from users
 bot.on('text', (ctx) => {
     const userId = ctx.message.from.id;
     const userDir = path.join(__dirname, 'users', String(userId));
@@ -81,7 +97,7 @@ bot.on('text', (ctx) => {
 
                 yarnInstall.on('close', (installCode) => {
                     if (installCode === 0) {
-                        ctx.reply('✅ 𝙳𝚎𝚙𝚎𝚗𝚍𝚎𝚗𝚌𝚒𝚎𝚜 𝚒𝚗𝚜𝚝𝚊𝚕𝚕𝚎𝚍 𝚜𝚞𝚌𝚌𝚎𝚜𝚜𝚏𝚞𝚕𝚕𝚢!\n𝙽𝚘𝚠 𝚜𝚎𝚗𝚍 𝚝𝚑𝚎 𝚗𝚊𝚖𝚎 𝚘𝚏 𝚝𝚑𝚎 𝚏𝚒𝚕𝚎 𝚢𝚘𝚞 𝚠𝚘𝚞𝚕𝚍 𝚕𝚒𝚔 𝚝𝚘 𝚜𝚝𝚊𝚛𝚝 𝚞𝚜𝚒𝚗𝚐  `𝚗𝚘𝚍𝚎`\n.𝚖𝚘𝚜𝚝𝚕𝚢 𝚒𝚝 𝚒𝚜 𝚒𝚗𝚍𝚎𝚡.𝚓𝚜');
+                        ctx.reply('✅ 𝙳𝚎𝚙𝚎𝚗𝚍𝚎𝚗𝚌𝚒𝚎𝚜 𝚒𝚗𝚜𝚝𝚊𝚕𝚕𝚎𝚍 𝚜𝚞𝚌𝚌𝚎𝚜𝚜𝚏𝚞𝚕𝚕𝚢!\n𝙽𝚘𝚠 𝚜𝚎𝚗𝚍 𝚝𝚑𝚎 𝚗𝚊𝚖𝚎 𝚘𝚏 𝚝𝚑𝚎 𝚏𝚒𝚕𝚎 𝚢𝚘𝚞 𝚠𝚘𝚞𝚕𝚍 𝚕𝚒𝚔𝚎 𝚝𝚘 𝚜𝚝𝚊𝚛𝚝 𝚞𝚜𝚒𝚗𝚐  `𝚗𝚘𝚍𝚎`\n.𝚖𝚘𝚜𝚝𝚕𝚢 𝚒𝚝 𝚒𝚜 𝚒𝚗𝚍𝚎𝚡.𝚓𝚜');
                         userStates[userId].step = 'ask_file';
                     } else {
                         ctx.reply('❌ 𝙴𝚛𝚛𝚘𝚛 𝚒𝚗𝚜𝚝𝚊𝚕𝚕𝚒𝚗𝚐 𝚍𝚎𝚙𝚎𝚗𝚍𝚎𝚗𝚌𝚒𝚎𝚜.');
@@ -121,19 +137,12 @@ bot.on('text', (ctx) => {
     }
 });
 
-bot.command('help', (ctx) => {
-    ctx.reply(`*Commands available:*\n\n` +
-        `- **/start**: Start the bot.\n` +
-        `- **/help**: Show this help message.\n\n` +
-        `*Workflow:*\n` +
-        `1. Send the repository URL to clone.\n` +
-        `2. Automatically install dependencies using \`yarn install\`.\n` +
-        `3. Specify the file to run using \`node\`.\n\n` +
-        `*Shell Commands:*\n` +
-        `- Use \`$<command>\` to execute any shell command in your directory.\n\n` +
-        `*Disclaimer:* Use responsibly. Avoid commands that may damage your system.`);
+// Start the Express server on port 3000
+app.listen(3000, () => {
+    console.log('Server running on http://localhost:3000');
 });
 
+// Launch the Telegram bot
 bot.launch()
     .then(() => {
         console.log('Bot is running...');
@@ -142,5 +151,6 @@ bot.launch()
         console.error('Error launching bot:', err);
     });
 
+// Handle process termination signals
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
