@@ -1,4 +1,4 @@
 // config.js
 module.exports = {
-    TELEGRAM_API_TOKEN: '7999085008:AAFd2E5igQgUbmN1WHVO0TSIZdlCY-konUs'
+    TELEGRAM_API_TOKEN: '7544997801:AAFazEfYCNTM5OYPgs1aVghjVnpBk5N-0Z0'
 };
