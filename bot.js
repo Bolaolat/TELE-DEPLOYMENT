@@ -138,10 +138,10 @@ bot.on('text', (ctx) => {
 });
 
 // Start the Express server on port 3000
-app.listen(3000, () => {
-    console.log('Server running on http://localhost:3000');
+const PORT = process.env.PORT || 3000; // Use the dynamic port or fallback to 3000
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
 });
-
 // Launch the Telegram bot
 bot.launch()
     .then(() => {
